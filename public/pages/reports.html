@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Reports — ABUAD Attendance</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="manifest" href="/manifest.json">
+</head>
+<body>
+<div id="offline-banner">&#9888; Offline</div><div id="toast"></div>
+<div class="app-shell">
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-logo"><div style="width:38px;height:38px;background:#C9A84C;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;color:#1C2D5E;font-size:1rem;flex-shrink:0">A</div><span>ABUAD<br>Attendance</span></div>
+    <div class="sidebar-nav">
+      <div class="nav-section">Main</div>
+      <div class="nav-item" data-page="dashboard.html"><span class="icon">&#127968;</span> Dashboard</div>
+      <div class="nav-item" data-page="courses.html"><span class="icon">&#128218;</span> Courses</div>
+      <div class="nav-item" data-page="sessions.html" data-role="admin,lecturer"><span class="icon">&#128197;</span> Sessions</div>
+      <div class="nav-section" data-role="student">My Attendance</div>
+      <div class="nav-item" data-page="enrol.html" data-role="student"><span class="icon">&#128247;</span> Face Enrolment</div>
+      <div class="nav-item" data-page="mark-attendance.html" data-role="student"><span class="icon">&#9989;</span> Mark Attendance</div>
+      <div class="nav-section" data-role="admin,lecturer">Management</div>
+      <div class="nav-item" data-page="students.html" data-role="admin,lecturer"><span class="icon">&#128101;</span> Students</div>
+      <div class="nav-item" data-page="reports.html" data-role="admin,lecturer"><span class="icon">&#128202;</span> Reports</div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-badge" style="margin-bottom:.6rem">
+        <div class="user-avatar" id="user-avatar">U</div>
+        <div><div id="user-name" style="font-weight:600;font-size:.85rem;color:#fff"></div><div id="user-role" style="font-size:.75rem;color:#C9A84C"></div></div>
+      </div>
+      <button class="btn btn-outline btn-sm btn-full" style="color:#fff;border-color:rgba(255,255,255,.3)" onclick="logout()">Sign Out</button>
+    </div>
+  </nav>
+  <div class="main-content">
+    <div class="topbar">
+      <button id="menu-toggle" style="background:none;border:none;font-size:1.4rem;cursor:pointer">&#9776;</button>
+      <div class="topbar-title">Attendance Reports</div>
+      <div class="topbar-right"></div>
+    </div>
+    <div class="page-content">
+      <div class="card" style="margin-bottom:1rem">
+        <div style="display:flex;gap:.8rem;flex-wrap:wrap;align-items:flex-end">
+          <div class="form-group" style="margin:0;flex:1;min-width:180px">
+            <label>Select Course</label>
+            <select id="rcrs" onchange="loadReport()"><option value="">All Courses</option></select>
+          </div>
+          <button class="btn btn-outline" onclick="exportCSV()">&#128190; Export CSV</button>
+        </div>
+      </div>
+      <div id="report-area">
+        <div class="card"><div class="card-title">&#128202; Course Report</div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Student</th><th>Matric No.</th><th>Sessions</th><th>Attended</th><th>Progress</th><th>Status</th></tr></thead>
+            <tbody id="rtbody"><tr><td colspan="6" style="text-align:center;color:#94A3B8">Select a course to view report</td></tr></tbody>
+          </table></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+  <script src="/js/db.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/app.js"></script>
+<script>
+let reportData=[];
+async function loadCourses(){
+  try{const c=await API.getCourses();document.getElementById('rcrs').innerHTML='<option value="">All Courses</option>'+c.map(x=>'<option value="'+x.course_id+'">'+x.course_code+' — '+x.course_title+'</option>').join('');}catch(e){}
+  const params=new URLSearchParams(window.location.search);
+  if(params.get('session'))loadSessionReport(params.get('session'));
+}
+async function loadReport(){
+  const cid=document.getElementById('rcrs').value;
+  if(!cid)return;
+  try{
+    reportData=await API.getCourseReport(cid);
+    document.getElementById('rtbody').innerHTML=reportData.map(r=>'<tr><td><strong>'+r.full_name+'</strong></td><td>'+(r.matric_no||'—')+'</td><td>'+r.total_sessions+'</td><td>'+r.attended+'</td><td>'+pctBar(r.percentage)+'</td><td>'+pctBadge(r.percentage)+'</td></tr>').join('')||'<tr><td colspan="6" style="text-align:center;color:#94A3B8">No data</td></tr>';
+  }catch(e){toast(e.message,'error');}
+}
+async function loadSessionReport(sid){
+  try{
+    reportData=await API.getSessionAttendance(sid);
+    document.getElementById('rtbody').innerHTML=reportData.map(r=>'<tr><td><strong>'+r.full_name+'</strong></td><td>'+(r.matric_no||'—')+'</td><td colspan="2"><span class="badge '+(r.status==='present'?'badge-green':'badge-red')+'">'+r.status+'</span></td><td>'+(r.recognition_score?'Score: '+r.recognition_score:'')+'</td><td>'+fmt.dt(r.marked_at)+'</td></tr>').join('')||'<tr><td colspan="6" style="text-align:center;color:#94A3B8">No data</td></tr>';
+  }catch(e){}
+}
+function exportCSV(){
+  if(!reportData.length)return toast('No data to export','error');
+  const cols=Object.keys(reportData[0]);
+  const csv=[cols.join(','),...reportData.map(r=>cols.map(c=>'"'+(r[c]??'')+'"').join(','))].join('
+');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='attendance_report.csv';a.click();
+}
+loadCourses();
+</script></body></html>

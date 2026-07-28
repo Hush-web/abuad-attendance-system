@@ -1,0 +1,1 @@
+UPDATE users SET password_hash = '$2a$10$37b8rII2DuaYmEkJTP8Qm.b3RdoLd2GKpYmNcg9M3heuo1e9mIXkC' WHERE email = 'admin@abuad.edu.ng';

@@ -1,0 +1,1 @@
+INSERT INTO users (full_name, email, password_hash, role) VALUES ('Test User', 'test@abuad.edu.ng', '$2a$10$IK9J5wduSIMQWlQ14jHqQOU9vK.drhcOgVKBhDxsFHN1i.9TDUMLq', 'student');
