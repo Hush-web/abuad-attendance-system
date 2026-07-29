@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Dashboard — ABUAD Attendance</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="manifest" href="/manifest.json">
+</head>
+<body>
+<div id="offline-banner">&#9888; Offline — attendance marking still works!</div>
+<div id="toast"></div>
+<div class="app-shell">
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-logo"><div style="width:38px;height:38px;background:#C9A84C;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;color:#1C2D5E;font-size:1rem;flex-shrink:0">A</div><span>ABUAD<br>Attendance</span></div>
+    <div class="sidebar-nav">
+      <div class="nav-section">Main</div>
+      <div class="nav-item" data-page="dashboard.html"><span class="icon">&#127968;</span> Dashboard</div>
+      <div class="nav-item" data-page="courses.html"><span class="icon">&#128218;</span> Courses</div>
+      <div class="nav-item" data-page="sessions.html" data-role="admin,lecturer"><span class="icon">&#128197;</span> Sessions</div>
+      <div class="nav-section" data-role="student">My Attendance</div>
+      <div class="nav-item" data-page="enrol.html" data-role="student"><span class="icon">&#128247;</span> Face Enrolment</div>
+      <div class="nav-item" data-page="mark-attendance.html" data-role="student"><span class="icon">&#9989;</span> Mark Attendance</div>
+      <div class="nav-section" data-role="admin,lecturer">Management</div>
+      <div class="nav-item" data-page="students.html" data-role="admin,lecturer"><span class="icon">&#128101;</span> Students</div>
+      <div class="nav-item" data-page="reports.html" data-role="admin,lecturer"><span class="icon">&#128202;</span> Reports</div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-badge" style="margin-bottom:.6rem">
+        <div class="user-avatar" id="user-avatar">U</div>
+        <div><div id="user-name" style="font-weight:600;font-size:.85rem;color:#fff"></div><div id="user-role" style="font-size:.75rem;color:#C9A84C"></div></div>
+      </div>
+      <button class="btn btn-outline btn-sm btn-full" style="color:#fff;border-color:rgba(255,255,255,.3)" onclick="logout()">Sign Out</button>
+    </div>
+  </nav>
+  <div class="main-content">
+    <div class="topbar">
+      <button id="menu-toggle" style="background:none;border:none;font-size:1.4rem;cursor:pointer">&#9776;</button>
+      <div class="topbar-title">Dashboard</div>
+      <div class="topbar-right"></div>
+    </div>
+    <div class="page-content">
+      <div id="low-att-alert" class="alert alert-danger" style="display:none">&#9888; <strong>Attendance Warning:</strong> <span id="low-msg"></span></div>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-label">Courses</div><div class="stat-value" id="sc">-</div><div class="stat-sub">Enrolled this semester</div></div>
+        <div class="stat-card"><div class="stat-label">Sessions</div><div class="stat-value" id="ss">-</div><div class="stat-sub">Total this semester</div></div>
+        <div class="stat-card"><div class="stat-label">Attended</div><div class="stat-value" id="sa">-</div><div class="stat-sub">Sessions present</div></div>
+        <div class="stat-card"><div class="stat-label">Avg Attendance</div><div class="stat-value" id="avg">-</div><div class="stat-sub">Across all courses</div></div>
+      </div>
+      <div id="student-sec" style="display:none">
+        <div class="card">
+          <div class="card-title">&#128202; Attendance by Course</div>
+          <div class="table-wrap"><table><thead><tr><th>Course</th><th>Sessions</th><th>Attended</th><th>Progress</th><th>Status</th></tr></thead>
+          <tbody id="att-tbody"></tbody></table></div>
+        </div>
+        <div style="margin-top:1rem;display:flex;gap:.8rem;flex-wrap:wrap">
+          <a href="/pages/enrol.html" class="btn btn-primary">&#128247; Face Enrolment</a>
+          <a href="/pages/mark-attendance.html" class="btn btn-gold">&#9989; Mark Attendance</a>
+        </div>
+      </div>
+      <div id="staff-sec" style="display:none">
+        <div class="card">
+          <div class="card-title">&#128197; Recent Sessions</div>
+          <div class="table-wrap"><table><thead><tr><th>Date</th><th>Course</th><th>Time</th><th>Location</th><th>Present</th><th></th></tr></thead>
+          <tbody id="sess-tbody"></tbody></table></div>
+        </div>
+        <div style="margin-top:1rem;display:flex;gap:.8rem;flex-wrap:wrap">
+          <a href="/pages/sessions.html" class="btn btn-primary">&#128197; New Session</a>
+          <a href="/pages/reports.html" class="btn btn-outline">&#128202; Reports</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+  <script src="/js/db.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/app.js"></script>
+<script>
+(async()=>{
+  const user=await getUser(); if(!user)return;
+  if(user.role==='student'){document.getElementById('student-sec').style.display='';loadStudent(user);}
+  else{document.getElementById('staff-sec').style.display='';loadStaff();}
+  const unsync=await DB.getUnsyncedRecords();
+  if(unsync.length&&navigator.onLine)await DB.requestSync();
+})();
+async function loadStudent(user){
+  try{
+    const sum=await API.getStudentSummary(user.user_id);
+    let ts=0,ta=0,low=[];
+    document.getElementById('att-tbody').innerHTML=sum.map(c=>{
+      ts+=parseInt(c.total_sessions)||0;ta+=parseInt(c.attended_sessions)||0;
+      const p=parseFloat(c.percentage)||0;
+      if(p<75&&c.total_sessions>0)low.push(c.course_code+' ('+p+'%)');
+      return '<tr><td><strong>'+c.course_code+'</strong><br><small style="color:#64748B">'+c.course_title+'</small></td><td>'+c.total_sessions+'</td><td>'+c.attended_sessions+'</td><td>'+pctBar(c.percentage)+'</td><td>'+pctBadge(c.percentage)+'</td></tr>';
+    }).join('')||'<tr><td colspan="5" style="text-align:center;color:#94A3B8">No courses enrolled</td></tr>';
+    document.getElementById('sc').textContent=sum.length;
+    document.getElementById('ss').textContent=ts;
+    document.getElementById('sa').textContent=ta;
+    const av=sum.length?(sum.reduce((s,c)=>s+(parseFloat(c.percentage)||0),0)/sum.length).toFixed(1)+'%':'--';
+    document.getElementById('avg').textContent=av;
+    if(low.length){document.getElementById('low-att-alert').style.display='flex';document.getElementById('low-msg').textContent='Below 75% in: '+low.join(', ');}
+  }catch(e){const r=await DB.getStudentRecords((await getUser()).user_id);document.getElementById('sa').textContent=r.length;}
+}
+async function loadStaff(){
+  try{
+    const[sess,courses]=await Promise.all([API.getSessions(),API.getCourses()]);
+    document.getElementById('sc').textContent=courses.length;
+    document.getElementById('ss').textContent=sess.length;
+    document.getElementById('sess-tbody').innerHTML=sess.slice(0,10).map(s=>'<tr><td>'+fmt.date(s.session_date)+'</td><td><strong>'+s.course_code+'</strong></td><td>'+fmt.time(s.start_time)+' – '+fmt.time(s.end_time)+'</td><td>'+s.location+'</td><td><span class="badge badge-green">'+(s.attendance_count||0)+'</span></td><td><a href="/pages/reports.html?session='+s.session_id+'" class="btn btn-sm btn-outline">View</a></td></tr>').join('')||'<tr><td colspan="6" style="text-align:center;color:#94A3B8">No sessions yet</td></tr>';
+  }catch(e){}
+}
+</script></body></html>

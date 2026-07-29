@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Login - ABUAD Attendance</title>
+<link rel="stylesheet" href="/css/style.css">
+<link rel="manifest" href="/manifest.json">
+</head>
+<body>
+<div class="auth-wrap"><div class="auth-card">
+  <div style="text-align:center;margin-bottom:1rem">
+    <div style="width:72px;height:72px;background:#1C2D5E;border-radius:50%;display:inline-flex;align-items:center;justify-content:center">
+      <span style="color:#C9A84C;font-size:2rem;font-weight:900">A</span>
+    </div>
+  </div>
+  <div class="auth-title">ABUAD Attendance System</div>
+  <div class="auth-sub">Afe Babalola University, Ado-Ekiti</div>
+  <div id="err" class="alert alert-danger" style="display:none"></div>
+  <form id="form">
+    <div class="form-group"><label>Email Address</label><input type="email" id="email" placeholder="you@abuad.edu.ng" required autocomplete="email"></div>
+    <div class="form-group"><label>Password</label><input type="password" id="pass" placeholder="••••••••" required autocomplete="current-password"></div>
+    <button type="submit" class="btn btn-primary btn-full" id="btn">Sign In</button>
+  </form>
+  <div style="margin-top:1rem;padding:.8rem;background:#F0F4FF;border-radius:8px;font-size:.8rem;color:#334155">
+    <div><b>Admin:</b> admin@abuad.edu.ng / Admin@123</div>
+    <div><b>Lecturer:</b> abiola@abuad.edu.ng / Lecturer@123</div>
+  </div>
+</div></div>
+
+<script>
+// Initialize IndexedDB FIRST before anything else
+const DB_NAME = 'AttendanceDB', DB_VERSION = 1;
+let _db = null;
+
+function openDB() {
+  if (_db) return Promise.resolve(_db);
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(DB_NAME, DB_VERSION);
+    r.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('meta'))
+        db.createObjectStore('meta', { keyPath: 'key' });
+      if (!db.objectStoreNames.contains('embeddings'))
+        db.createObjectStore('embeddings', { keyPath: 'studentId' });
+      if (!db.objectStoreNames.contains('attendanceRecords')) {
+        const s = db.createObjectStore('attendanceRecords', { keyPath: 'localId', autoIncrement: true });
+        s.createIndex('by_synced', 'synced', { unique: false });
+        s.createIndex('by_student', 'studentId', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('tokens')) {
+        const t = db.createObjectStore('tokens', { keyPath: 'tokenUuid' });
+        t.createIndex('by_session', 'sessionId', { unique: false });
+      }
+    };
+    r.onsuccess = () => { _db = r.result; res(_db); };
+    r.onerror = () => {
+      // Version conflict — delete and retry
+      indexedDB.deleteDatabase(DB_NAME);
+      _db = null;
+      const r2 = indexedDB.open(DB_NAME, DB_VERSION);
+      r2.onupgradeneeded = e => {
+        const db = e.target.result;
+        ['meta','embeddings','attendanceRecords','tokens'].forEach(name => {
+          if (!db.objectStoreNames.contains(name)) {
+            if (name === 'meta') db.createObjectStore('meta', { keyPath: 'key' });
+            else if (name === 'embeddings') db.createObjectStore('embeddings', { keyPath: 'studentId' });
+            else if (name === 'attendanceRecords') {
+              const s = db.createObjectStore('attendanceRecords', { keyPath: 'localId', autoIncrement: true });
+              s.createIndex('by_synced','synced',{unique:false});
+              s.createIndex('by_student','studentId',{unique:false});
+            }
+            else if (name === 'tokens') {
+              const t = db.createObjectStore('tokens', { keyPath: 'tokenUuid' });
+              t.createIndex('by_session','sessionId',{unique:false});
+            }
+          }
+        });
+      };
+      r2.onsuccess = () => { _db = r2.result; res(_db); };
+      r2.onerror = () => rej(r2.error);
+    };
+  });
+}
+
+async function setMeta(key, value) {
+  const db = await openDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('meta', 'readwrite');
+    tx.objectStore('meta').put({ key, value });
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+
+async function getMeta(key) {
+  const db = await openDB();
+  return new Promise((res) => {
+    const tx = db.transaction('meta', 'readonly');
+    const r = tx.objectStore('meta').get(key);
+    r.onsuccess = () => res(r.result?.value ?? null);
+    r.onerror = () => res(null);
+  });
+}
+
+// Check if already logged in
+(async () => {
+  try {
+    await openDB();
+    const jwt = await getMeta('jwt');
+    if (jwt) window.location.href = '/pages/dashboard.html';
+  } catch(e) { console.log('DB init:', e.message); }
+})();
+
+// Register service worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(e => console.log('SW:', e));
+}
+
+// Login form
+document.getElementById('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = document.getElementById('btn');
+  const err = document.getElementById('err');
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+  err.style.display = 'none';
+
+  const email    = document.getElementById('email').value.trim();
+  const password = document.getElementById('pass').value;
+
+  try {
+    // Make sure DB is open first
+    await openDB();
+
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Login failed');
+
+    await setMeta('jwt', data.token);
+    await setMeta('user', data.user);
+    window.location.href = '/pages/dashboard.html';
+
+  } catch(ex) {
+    err.textContent = ex.message;
+    err.style.display = 'flex';
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+  }
+});
+</script>
+</body>
+</html>

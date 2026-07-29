@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Face Enrolment — ABUAD Attendance</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="manifest" href="/manifest.json">
+</head>
+<body>
+<div id="offline-banner">&#9888; Offline — saves locally</div>
+<div id="toast"></div>
+<div class="app-shell">
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-logo"><div style="width:38px;height:38px;background:#C9A84C;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;color:#1C2D5E;font-size:1rem;flex-shrink:0">A</div><span>ABUAD<br>Attendance</span></div>
+    <div class="sidebar-nav">
+      <div class="nav-section">Main</div>
+      <div class="nav-item" data-page="dashboard.html"><span class="icon">&#127968;</span> Dashboard</div>
+      <div class="nav-item" data-page="courses.html"><span class="icon">&#128218;</span> Courses</div>
+      <div class="nav-item" data-page="sessions.html" data-role="admin,lecturer"><span class="icon">&#128197;</span> Sessions</div>
+      <div class="nav-section" data-role="student">My Attendance</div>
+      <div class="nav-item" data-page="enrol.html" data-role="student"><span class="icon">&#128247;</span> Face Enrolment</div>
+      <div class="nav-item" data-page="mark-attendance.html" data-role="student"><span class="icon">&#9989;</span> Mark Attendance</div>
+      <div class="nav-section" data-role="admin,lecturer">Management</div>
+      <div class="nav-item" data-page="students.html" data-role="admin,lecturer"><span class="icon">&#128101;</span> Students</div>
+      <div class="nav-item" data-page="reports.html" data-role="admin,lecturer"><span class="icon">&#128202;</span> Reports</div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-badge" style="margin-bottom:.6rem">
+        <div class="user-avatar" id="user-avatar">U</div>
+        <div><div id="user-name" style="font-weight:600;font-size:.85rem;color:#fff"></div><div id="user-role" style="font-size:.75rem;color:#C9A84C"></div></div>
+      </div>
+      <button class="btn btn-outline btn-sm btn-full" style="color:#fff;border-color:rgba(255,255,255,.3)" onclick="logout()">Sign Out</button>
+    </div>
+  </nav>
+  <div class="main-content">
+    <div class="topbar">
+      <button id="menu-toggle" style="background:none;border:none;font-size:1.4rem;cursor:pointer">&#9776;</button>
+      <div class="topbar-title">Face Enrolment</div>
+      <div class="topbar-right"></div>
+    </div>
+    <div class="page-content"><div style="max-width:520px;margin:0 auto">
+      <div id="enrolled-note" class="alert alert-success" style="display:none">&#9989; Face already enrolled. Re-enrol below to update.</div>
+      <div class="card" style="margin-bottom:1rem">
+        <div class="card-title">Instructions</div>
+        <ol style="padding-left:1.2rem;font-size:.9rem;line-height:2">
+          <li>Sit in good lighting and face the camera directly</li>
+          <li>Click <strong>Start Enrolment</strong> and wait for model loading (~20 MB, once only)</li>
+          <li>The system captures 5 frames automatically — hold still</li>
+          <li>Your face data is stored <strong>only on this device</strong> — never uploaded</li>
+        </ol>
+      </div>
+      <div class="card">
+        <div class="card-title">&#128247; Camera</div>
+        <div style="margin-bottom:.8rem">
+          <div style="font-size:.83rem;color:#64748B" id="mstat">Models not loaded</div>
+          <div class="progress-wrap" style="margin-top:.3rem"><div class="progress-bar green" id="mprog" style="width:0%"></div></div>
+        </div>
+        <div class="camera-wrap" style="margin-bottom:.8rem">
+          <video id="video" autoplay muted playsinline style="border-radius:8px"></video>
+          <div class="camera-overlay"><div class="face-oval"></div><div class="liveness-status" id="cstat">Centre your face in the oval</div></div>
+        </div>
+        <div class="step-indicators">
+          <div class="step-dot" id="d0">1</div><div class="step-dot" id="d1">2</div><div class="step-dot" id="d2">3</div><div class="step-dot" id="d3">4</div><div class="step-dot" id="d4">5</div>
+        </div>
+        <div style="display:flex;gap:.8rem;margin-top:1rem">
+          <button class="btn btn-primary" id="sbtn" onclick="startEnrol()">&#9654; Start Enrolment</button>
+          <button class="btn btn-outline" id="stopbtn" onclick="stopCam()" style="display:none">&#9632; Stop</button>
+        </div>
+        <div id="result" class="alert" style="display:none;margin-top:.8rem"></div>
+      </div>
+    </div></div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <script src="/js/db.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/app.js"></script>
+<script src="/js/face-engine.js"></script>
+<script>
+let stream=null;
+async function startEnrol(){
+  const btn=document.getElementById('sbtn');btn.disabled=true;btn.textContent='Loading…';
+  try{
+    await FaceEngine.loadModels((msg,p)=>{document.getElementById('mstat').textContent=msg;document.getElementById('mprog').style.width=p+'%';});
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:480,height:360}});
+    const v=document.getElementById('video');v.srcObject=stream;
+    await new Promise(r=>v.addEventListener('loadedmetadata',r,{once:true}));
+    document.getElementById('stopbtn').style.display='';
+    const user=await getUser();
+    const descs=[];
+    for(let i=0;i<5;i++){
+      document.getElementById('d'+i).classList.add('active');
+      await new Promise(r=>setTimeout(r,900));
+      const det=await FaceEngine.detectFull(v);
+      if(!det)throw new Error('No face on frame '+(i+1));
+      descs.push(det.descriptor);
+      document.getElementById('d'+i).classList.remove('active');
+      document.getElementById('d'+i).classList.add('done');
+      document.getElementById('d'+i).textContent='\u2713';
+    }
+    const mean=new Float32Array(128);
+    descs.forEach(d=>d.forEach((v2,i)=>mean[i]+=v2));
+    mean.forEach((_,i)=>mean[i]/=descs.length);
+    await DB.saveEmbedding(user.user_id,mean);
+    try{await API.registerEmbedding('enrolled-'+user.user_id);}catch(e){}
+    stopCam();
+    const r=document.getElementById('result');r.className='alert alert-success';r.textContent='\u2705 Enrolment successful! You can now mark attendance.';r.style.display='flex';
+    toast('Face enrolled!','success');
+  }catch(e){const r=document.getElementById('result');r.className='alert alert-danger';r.textContent='\u274C '+e.message;r.style.display='flex';stopCam();}
+  finally{btn.disabled=false;btn.textContent='\u25B6 Start Enrolment';}
+}
+function stopCam(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}document.getElementById('stopbtn').style.display='none';}
+(async()=>{const u=await getUser();if(u&&await DB.hasEmbedding(u.user_id))document.getElementById('enrolled-note').style.display='flex';})();
+</script></body></html>

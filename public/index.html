@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>ABUAD Attendance</title><link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#1C2D5E">
+<script>
+(async()=>{
+  const r=indexedDB.open('AttendanceDB',1);
+  r.onsuccess=function(){const tx=r.result.transaction('meta','readonly');const req=tx.objectStore('meta').get('jwt');req.onsuccess=()=>{window.location.href=req.result?.value?'/pages/dashboard.html':'/pages/login.html';};req.onerror=()=>{window.location.href='/pages/login.html';};};
+  r.onerror=()=>{window.location.href='/pages/login.html';};
+})();
+</script></head>
+<body style="background:#1C2D5E;display:flex;align-items:center;justify-content:center;height:100vh;color:#C9A84C;font-family:sans-serif">Loading ABUAD Attendance System…</body>
+</html>

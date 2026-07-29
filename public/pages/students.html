@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Students — ABUAD Attendance</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="manifest" href="/manifest.json">
+</head>
+<body>
+<div id="offline-banner">&#9888; Offline</div><div id="toast"></div>
+<div class="app-shell">
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-logo"><div style="width:38px;height:38px;background:#C9A84C;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;color:#1C2D5E;font-size:1rem;flex-shrink:0">A</div><span>ABUAD<br>Attendance</span></div>
+    <div class="sidebar-nav">
+      <div class="nav-section">Main</div>
+      <div class="nav-item" data-page="dashboard.html"><span class="icon">&#127968;</span> Dashboard</div>
+      <div class="nav-item" data-page="courses.html"><span class="icon">&#128218;</span> Courses</div>
+      <div class="nav-item" data-page="sessions.html" data-role="admin,lecturer"><span class="icon">&#128197;</span> Sessions</div>
+      <div class="nav-section" data-role="student">My Attendance</div>
+      <div class="nav-item" data-page="enrol.html" data-role="student"><span class="icon">&#128247;</span> Face Enrolment</div>
+      <div class="nav-item" data-page="mark-attendance.html" data-role="student"><span class="icon">&#9989;</span> Mark Attendance</div>
+      <div class="nav-section" data-role="admin,lecturer">Management</div>
+      <div class="nav-item" data-page="students.html" data-role="admin,lecturer"><span class="icon">&#128101;</span> Students</div>
+      <div class="nav-item" data-page="reports.html" data-role="admin,lecturer"><span class="icon">&#128202;</span> Reports</div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-badge" style="margin-bottom:.6rem">
+        <div class="user-avatar" id="user-avatar">U</div>
+        <div><div id="user-name" style="font-weight:600;font-size:.85rem;color:#fff"></div><div id="user-role" style="font-size:.75rem;color:#C9A84C"></div></div>
+      </div>
+      <button class="btn btn-outline btn-sm btn-full" style="color:#fff;border-color:rgba(255,255,255,.3)" onclick="logout()">Sign Out</button>
+    </div>
+  </nav>
+  <div class="main-content">
+    <div class="topbar">
+      <button id="menu-toggle" style="background:none;border:none;font-size:1.4rem;cursor:pointer">&#9776;</button>
+      <div class="topbar-title">Students</div>
+      <div class="topbar-right"><button class="btn btn-primary btn-sm" onclick="openModal('am')">+ Add Student</button></div>
+    </div>
+    <div class="page-content">
+      <div class="card" style="margin-bottom:1rem">
+        <div style="display:flex;gap:.8rem;flex-wrap:wrap;align-items:center">
+          <input type="text" id="search" placeholder="Search name or matric…" style="max-width:280px" oninput="filterList()">
+          <select id="crole" onchange="load()" style="max-width:160px"><option value="student">Students</option><option value="lecturer">Lecturers</option><option value="admin">Admins</option></select>
+        </div>
+      </div>
+      <div class="card"><div class="table-wrap"><table>
+        <thead><tr><th>Name</th><th>Email</th><th>Matric No.</th><th>Role</th><th>Joined</th><th>Actions</th></tr></thead>
+        <tbody id="ubody"><tr><td colspan="6" style="text-align:center;color:#94A3B8">Loading…</td></tr></tbody>
+      </table></div></div>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay hidden" id="am">
+  <div class="modal-box">
+    <div class="modal-header"><div class="modal-title">Add User</div><button class="modal-close">&#x2715;</button></div>
+    <div class="form-row"><div class="form-group"><label>Full Name</label><input type="text" id="an" placeholder="e.g. Ada Okonkwo"></div><div class="form-group"><label>Role</label><select id="ar"><option value="student">Student</option><option value="lecturer">Lecturer</option><option value="admin">Admin</option></select></div></div>
+    <div class="form-row"><div class="form-group"><label>Email</label><input type="email" id="ae" placeholder="student@abuad.edu.ng"></div><div class="form-group"><label>Matric No.</label><input type="text" id="am2" placeholder="20/CSC/001"></div></div>
+    <div class="form-group"><label>Phone</label><input type="tel" id="ap" placeholder="08012345678"></div>
+    <div class="form-group"><label>Password</label><input type="password" id="apw" placeholder="Min 8 characters"></div>
+    <button class="btn btn-primary btn-full" onclick="addUser()">Create Account</button>
+    <div id="aerr" class="alert alert-danger" style="display:none;margin-top:.8rem"></div>
+  </div>
+</div>
+  <script src="/js/db.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/app.js"></script>
+<script>
+let allUsers=[];
+async function load(){
+  try{allUsers=await API.getUsers(document.getElementById('crole').value);renderList(allUsers);}catch(e){}
+}
+function renderList(users){
+  document.getElementById('ubody').innerHTML=users.map(u=>'<tr><td><strong>'+u.full_name+'</strong></td><td>'+u.email+'</td><td>'+(u.matric_no||'—')+'</td><td><span class="badge badge-navy">'+u.role+'</span></td><td>'+fmt.date(u.created_at)+'</td><td><button class="btn btn-sm btn-danger" onclick="delUser('+u.user_id+',\''+u.full_name+'\')">&#128465;</button></td></tr>').join('')||'<tr><td colspan="6" style="text-align:center;color:#94A3B8">No users found</td></tr>';
+}
+function filterList(){const q=document.getElementById('search').value.toLowerCase();renderList(allUsers.filter(u=>(u.full_name+u.email+(u.matric_no||'')).toLowerCase().includes(q)));}
+async function addUser(){
+  const err=document.getElementById('aerr');err.style.display='none';
+  try{
+    await API.register({full_name:document.getElementById('an').value.trim(),email:document.getElementById('ae').value.trim(),password:document.getElementById('apw').value,role:document.getElementById('ar').value,matric_no:document.getElementById('am2').value.trim()||undefined,phone:document.getElementById('ap').value.trim()||undefined});
+    toast('Account created \u2713','success');closeModal('am');load();
+  }catch(e){err.textContent=e.message;err.style.display='flex';}
+}
+async function delUser(id,name){
+  if(!confirm('Delete '+name+'? This cannot be undone.'))return;
+  try{await API.deleteUser(id);toast('Deleted','success');load();}catch(e){toast(e.message,'error');}
+}
+load();
+</script></body></html>

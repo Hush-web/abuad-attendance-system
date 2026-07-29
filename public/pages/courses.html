@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Courses — ABUAD Attendance</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="manifest" href="/manifest.json">
+</head>
+<body>
+<div id="offline-banner">&#9888; Offline</div><div id="toast"></div>
+<div class="app-shell">
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-logo"><div style="width:38px;height:38px;background:#C9A84C;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;color:#1C2D5E;font-size:1rem;flex-shrink:0">A</div><span>ABUAD<br>Attendance</span></div>
+    <div class="sidebar-nav">
+      <div class="nav-section">Main</div>
+      <div class="nav-item" data-page="dashboard.html"><span class="icon">&#127968;</span> Dashboard</div>
+      <div class="nav-item" data-page="courses.html"><span class="icon">&#128218;</span> Courses</div>
+      <div class="nav-item" data-page="sessions.html" data-role="admin,lecturer"><span class="icon">&#128197;</span> Sessions</div>
+      <div class="nav-section" data-role="student">My Attendance</div>
+      <div class="nav-item" data-page="enrol.html" data-role="student"><span class="icon">&#128247;</span> Face Enrolment</div>
+      <div class="nav-item" data-page="mark-attendance.html" data-role="student"><span class="icon">&#9989;</span> Mark Attendance</div>
+      <div class="nav-section" data-role="admin,lecturer">Management</div>
+      <div class="nav-item" data-page="students.html" data-role="admin,lecturer"><span class="icon">&#128101;</span> Students</div>
+      <div class="nav-item" data-page="reports.html" data-role="admin,lecturer"><span class="icon">&#128202;</span> Reports</div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-badge" style="margin-bottom:.6rem">
+        <div class="user-avatar" id="user-avatar">U</div>
+        <div><div id="user-name" style="font-weight:600;font-size:.85rem;color:#fff"></div><div id="user-role" style="font-size:.75rem;color:#C9A84C"></div></div>
+      </div>
+      <button class="btn btn-outline btn-sm btn-full" style="color:#fff;border-color:rgba(255,255,255,.3)" onclick="logout()">Sign Out</button>
+    </div>
+  </nav>
+  <div class="main-content">
+    <div class="topbar">
+      <button id="menu-toggle" style="background:none;border:none;font-size:1.4rem;cursor:pointer">&#9776;</button>
+      <div class="topbar-title">Courses</div>
+      <div class="topbar-right"><div id="add-btn"><button class="btn btn-primary btn-sm" onclick="openModal('cm')">+ Add Course</button></div></div>
+    </div>
+    <div class="page-content">
+      <div class="card"><div class="table-wrap"><table>
+        <thead><tr><th>Code</th><th>Title</th><th>Lecturer</th><th>Units</th><th>Semester</th><th>Actions</th></tr></thead>
+        <tbody id="ctbody"><tr><td colspan="6" style="text-align:center;color:#94A3B8">Loading…</td></tr></tbody>
+      </table></div></div>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay hidden" id="cm">
+  <div class="modal-box">
+    <div class="modal-header"><div class="modal-title">Add Course</div><button class="modal-close">&#x2715;</button></div>
+    <div class="form-row"><div class="form-group"><label>Course Code</label><input type="text" id="cc" placeholder="CSC401"></div><div class="form-group"><label>Units</label><input type="number" id="cu" value="2" min="1" max="6"></div></div>
+    <div class="form-group"><label>Course Title</label><input type="text" id="ct" placeholder="Software Engineering"></div>
+    <div class="form-group" id="lw"><label>Assign Lecturer</label><select id="cl"><option value="">Select…</option></select></div>
+    <div class="form-group"><label>Semester</label><select id="cs"><option>2024/2025 First Semester</option><option>2024/2025 Second Semester</option><option>2025/2026 First Semester</option></select></div>
+    <button class="btn btn-primary btn-full" onclick="createCourse()">Create Course</button>
+    <div id="cerr" class="alert alert-danger" style="display:none;margin-top:.8rem"></div>
+  </div>
+</div>
+<div class="modal-overlay hidden" id="em">
+  <div class="modal-box">
+    <div class="modal-header"><div class="modal-title" id="et">Enrol Students</div><button class="modal-close">&#x2715;</button></div>
+    <div class="form-group"><label>Select Students (hold Ctrl/Cmd for multiple)</label><select id="ss" multiple style="height:180px"></select></div>
+    <button class="btn btn-primary btn-full" onclick="enrolStudents()">Enrol Selected</button>
+    <div id="eerr" class="alert alert-danger" style="display:none;margin-top:.8rem"></div>
+  </div>
+</div>
+  <script src="/js/db.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/app.js"></script>
+<script>
+let selCid=null;
+async function loadCourses(){
+  const user=await getUser();
+  if(user?.role==='student')document.getElementById('add-btn').style.display='none';
+  try{
+    const c=await API.getCourses();
+    document.getElementById('ctbody').innerHTML=c.map(x=>'<tr><td><strong>'+x.course_code+'</strong></td><td>'+x.course_title+'</td><td>'+(x.lecturer_name||'—')+'</td><td>'+x.credit_units+'</td><td><span class="badge badge-navy">'+x.semester+'</span></td><td style="display:flex;gap:.4rem">'+(user?.role!=='student'?'<button class="btn btn-sm btn-outline" onclick="openEnrol('+x.course_id+',\''+x.course_code+'\')">&#128101; Enrol</button>':'')+(user?.role==='admin'?'<button class="btn btn-sm btn-danger" onclick="delCourse('+x.course_id+')">&#128465;</button>':'')+'</td></tr>').join('')||'<tr><td colspan="6" style="text-align:center;color:#94A3B8">No courses</td></tr>';
+  }catch(e){}
+}
+async function createCourse(){
+  const err=document.getElementById('cerr');err.style.display='none';
+  try{
+    const user=await getUser();
+    await API.createCourse({course_code:document.getElementById('cc').value.trim(),course_title:document.getElementById('ct').value.trim(),credit_units:document.getElementById('cu').value,semester:document.getElementById('cs').value,lecturer_id:user.role==='admin'?document.getElementById('cl').value:undefined});
+    toast('Course created \u2713','success');closeModal('cm');loadCourses();
+  }catch(e){err.textContent=e.message;err.style.display='flex';}
+}
+async function openEnrol(id,code){
+  selCid=id;document.getElementById('et').textContent='Enrol Students — '+code;
+  try{
+    const[all,enrolled]=await Promise.all([API.getUsers('student'),API.getCourseStudents(id)]);
+    const eids=enrolled.map(s=>s.user_id);
+    document.getElementById('ss').innerHTML=all.filter(s=>!eids.includes(s.user_id)).map(s=>'<option value="'+s.user_id+'">'+s.full_name+' ('+(s.matric_no||s.email)+')</option>').join('')||'<option disabled>All students already enrolled</option>';
+  }catch(e){}
+  openModal('em');
+}
+async function enrolStudents(){
+  const sel=document.getElementById('ss'),ids=Array.from(sel.selectedOptions).map(o=>parseInt(o.value));
+  if(!ids.length)return toast('Select at least one student','error');
+  try{await API.enrollStudents(selCid,ids);toast(ids.length+' enrolled \u2713','success');closeModal('em');}catch(e){document.getElementById('eerr').textContent=e.message;document.getElementById('eerr').style.display='flex';}
+}
+async function delCourse(id){if(!confirm('Delete course?'))return;try{await API.deleteCourse(id);toast('Deleted','success');loadCourses();}catch(e){toast(e.message,'error');}}
+(async()=>{const u=await getUser();if(u?.role!=='admin')document.getElementById('lw').style.display='none';else{try{const l=await API.getUsers('lecturer');document.getElementById('cl').innerHTML='<option value="">Select…</option>'+l.map(x=>'<option value="'+x.user_id+'">'+x.full_name+'</option>').join('');}catch(e){}}loadCourses();})();
+</script></body></html>
